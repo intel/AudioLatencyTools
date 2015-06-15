@@ -54,6 +54,15 @@
             unless="sdk.dir"
     />
 
+    <property name="android.build.tools.dir" location="${sdk.dir}/build-tools/19.1.0" />
+    <condition property="exe" value=".exe" else=""><os family="windows" /></condition>
+    <condition property="bat" value=".bat" else=""><os family="windows" /></condition>
+    <property name="adb" location="${android.build.tools.dir}/adb${exe}" />
+    <property name="zipalign" location="${android.build.tools.dir}/zipalign${exe}" />
+    <property name="aidl" location="${android.build.tools.dir}/aidl${exe}" />
+    <property name="aapt" location="${android.build.tools.dir}/aapt${exe}" />
+    <property name="dx" location="${android.build.tools.dir}/dx${exe}" />
+
     <!--
         Import per project custom build rules if present at the root of the project.
         This is the place to put custom intermediary targets such as:
