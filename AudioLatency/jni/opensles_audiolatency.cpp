@@ -193,7 +193,7 @@ void start_continuous_input() {
     }
     memset(inbuffer, 0, sizeof(short)*mMono);
     float sample;
-    int interval = 10;
+    int interval;
 
     //showCurrentTime("Start Recording ");
     int mBufferFrames = bufferFrames;
@@ -211,8 +211,13 @@ void start_continuous_input() {
     while (running) {
         pulseNumber = 0;
         samps = readInput(p,inbuffer,mMono);
+        interval = sampleRate/2000; // sample of 0.5ms
+        if (interval >= samps) { //0.5ms
+            interval = samps/2;
+        }
         if (samps > 0 && flag == 0 ) {
             gettimeofday(&start, NULL);
+            pulseNumber = 0;
             for (i=0; i<samps; i++) {
 
                 sample = (float)inbuffer[i]/32768.0f;
@@ -220,7 +225,7 @@ void start_continuous_input() {
                 sample = (sample<=-0.99f? -0.99: sample);
 
                 // detect for the pulse pcm data
-                if ((sample >= 0.9f) || (sample <= -0.9f)) {
+                if ((sample >= 0.4f) || (sample <= -0.4f)) {
                     pulseNumber++;
                 }
 
@@ -233,7 +238,9 @@ void start_continuous_input() {
                     time_sleep.tv_sec = timeout_us/1000000;
                     time_sleep.tv_nsec = (timeout_us - time_sleep.tv_sec*1000000) * 1000;
                     LOGD("sleep time:tv_sec is %ld, tv_nsec is %ld, samps & detection is %d, %d",time_sleep.tv_sec, time_sleep.tv_nsec, samps, i);
-                    nanosleep(&time_sleep,NULL);
+                    if (time_sleep.tv_sec>0 && time_sleep.tv_nsec>0) {
+                        nanosleep(&time_sleep,NULL);
+                    }
                     native_setDtr(1);
                 }
             }
