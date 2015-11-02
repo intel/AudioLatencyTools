@@ -21,6 +21,7 @@
 #include "pulseusb_jni.h"
 #include "opensles_audiolatency.h"
 #include <sys/time.h>
+#include <math.h>
 
 #define DUMPTIME 0
 
@@ -194,6 +195,9 @@ void start_continuous_input() {
     memset(inbuffer, 0, sizeof(short)*mMono);
     float sample;
     int interval;
+    int noiseInterval = 20;
+    float noiseAverage = 0.0;
+    float threshold = 0.25f * 32768.0f;
 
     //showCurrentTime("Start Recording ");
     int mBufferFrames = bufferFrames;
@@ -215,34 +219,50 @@ void start_continuous_input() {
         if (interval >= samps) { //0.5ms
             interval = samps/2;
         }
+
         if (samps > 0 && flag == 0 ) {
             gettimeofday(&start, NULL);
             pulseNumber = 0;
-            for (i=0; i<samps; i++) {
-
-                sample = (float)inbuffer[i]/32768.0f;
-                sample = (sample>= 0.99f?  0.99: sample);
-                sample = (sample<=-0.99f? -0.99: sample);
-
-                // detect for the pulse pcm data
-                if ((sample >= 0.4f) || (sample <= -0.4f)) {
-                    pulseNumber++;
+            // calculate noiseAverage
+            if (noiseInterval>0) {
+                noiseInterval--;
+                float total = 0.0;
+                for (i=0; i<samps; i++) {
+                    sample = (float)inbuffer[i];
+                    total += fabs(sample);
                 }
+                if ( noiseAverage == 0.0 ) {
+                    noiseAverage = total/samps;
+                }
+                noiseAverage = (noiseAverage + total/samps)/2;
+                //LOGD("continuous_input: noiseAverage is %f", noiseAverage );
+            } else {
+                for (i=0; i<samps; i++) {
+                    sample = (float)inbuffer[i];
 
-                if((pulseNumber >= interval) && (flag == 0)) {
-                    flag = 1;
-                    struct timespec time_sleep;
-                    float timeout_us = (1000.0f*1000/sampleRate)*i;
-                    gettimeofday(&end, NULL);
-                    timeout_us = timeout_us - ((end.tv_sec-start.tv_sec)*1000000+(end.tv_usec-start.tv_usec));
-                    time_sleep.tv_sec = timeout_us/1000000;
-                    time_sleep.tv_nsec = (timeout_us - time_sleep.tv_sec*1000000) * 1000;
-                    LOGD("sleep time:tv_sec is %ld, tv_nsec is %ld, samps & detection is %d, %d",time_sleep.tv_sec, time_sleep.tv_nsec, samps, i);
-                    if (time_sleep.tv_sec>0 && time_sleep.tv_nsec>0) {
-                        nanosleep(&time_sleep,NULL);
+                    // detect for the pulse pcm data
+                    if ( (fabs(sample) > threshold) ) {
+                        //LOGD("continuous_input: sample is %f, pulseNum is %d, interval is %d", sample, pulseNumber, interval );
+                        pulseNumber++;
                     }
-                    native_setDtr(1);
+
+                    if((pulseNumber >= interval) && (flag == 0)) {
+                        flag = 1;
+                        struct timespec time_sleep;
+                        float timeout_us = (1000.0f*1000/sampleRate)*i;
+                        gettimeofday(&end, NULL);
+                        timeout_us = timeout_us - ((end.tv_sec-start.tv_sec)*1000000+(end.tv_usec-start.tv_usec));
+                        time_sleep.tv_sec = timeout_us/1000000;
+                        time_sleep.tv_nsec = (timeout_us - time_sleep.tv_sec*1000000) * 1000;
+                        LOGD("sleep time:tv_sec is %ld, tv_nsec is %ld, samps & detection is %d, %d",time_sleep.tv_sec, time_sleep.tv_nsec, samps, i);
+                        if (time_sleep.tv_sec>0 && time_sleep.tv_nsec>0) {
+                            nanosleep(&time_sleep,NULL);
+                        }
+                        native_setDtr(1);
+                        break;
+                    }
                 }
+
             }
 
         }
@@ -251,6 +271,7 @@ void start_continuous_input() {
     destroyAudioInput(p);
     free(inbuffer);
 }
+
 
 void stop_continuous_input() {
     running = 0;
